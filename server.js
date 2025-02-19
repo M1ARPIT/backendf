@@ -1,10 +1,18 @@
 const WebSocket = require("ws");
-const server = new WebSocket.Server({ port: 8080 });
+const express = require("express");
+const http = require("http");
+
+const app = express();
+const server = http.createServer(app); // Create an HTTP server
+const wss = new WebSocket.Server({ server }); // Attach WebSocket to HTTP server
+
+const PORT = process.env.PORT || 8080; // Use dynamic port for Render
 
 let waitingPlayer = null;
 const rooms = {};
 
-server.on("connection", (socket) => {
+wss.on("connection", (socket) => {
+    console.log("New WebSocket connection established!");
     socket.on("message", (message) => {
         const data = JSON.parse(message);
         switch (data.type) {
