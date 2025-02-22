@@ -1,10 +1,23 @@
 const WebSocket = require("ws");
-const server = new WebSocket.Server({ port: 8080 });
+const express = require("express");
+const http = require("http");
+
+const app = express();
+const server = http.createServer(app); // Create an HTTP server
+const wss = new WebSocket.Server({ server }); // Attach WebSocket to HTTP server
+
+const PORT = process.env.PORT || 8080; // Use dynamic port for Render
+
+// Add a basic HTTP route for Render to detect the server
+app.get("/", (req, res) => {
+  res.send("WebSocket server is running!");
+});
 
 let waitingPlayer = null;
 const rooms = {};
 
-server.on("connection", (socket) => {
+wss.on("connection", (socket) => {
+    console.log("New WebSocket connection established!");
     socket.on("message", (message) => {
         const data = JSON.parse(message);
         switch (data.type) {
@@ -18,6 +31,12 @@ server.on("connection", (socket) => {
     socket.on("close", () => handleDisconnect(socket));
 });
 
+// Start the server explicitly on 0.0.0.0
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+// Rest of your functions remain unchanged
 function handleStrangerMatch(socket) {
     if (!waitingPlayer) {
         waitingPlayer = socket;
@@ -62,22 +81,19 @@ function handleJoinRoom(socket, roomId) {
         sendSafe(rooms[roomId].player1, { type: "MATCH_FOUND", roomId, player: "p1" });
         sendSafe(rooms[roomId].player2, { type: "MATCH_FOUND", roomId, player: "p2" });
 
-        // ✅ Jab dono players join kar lein, tab ROUND_START bhejna hai
         sendSafe(rooms[roomId].player1, { type: "ROUND_START", round: 1 });
         sendSafe(rooms[roomId].player2, { type: "ROUND_START", round: 1 });
-
     } else {
         sendSafe(socket, { type: "ROOM_INVALID" });
     }
 }
 
 function handleMove(socket, move) {
-    if (!socket.room) return; // Ensure the socket is in a room
+    if (!socket.room) return;
     const roomId = socket.room;
     const room = rooms[roomId];
     if (!room) return;
 
-    // Prevent move change after selection
     if (socket === room.player1) {
         if (room.p1Move !== null) return;
         room.p1Move = move;
@@ -86,7 +102,6 @@ function handleMove(socket, move) {
         room.p2Move = move;
     }
 
-    // If both moves are set, process the round
     if (room.p1Move && room.p2Move) {
         checkRound(roomId);
     }
@@ -95,8 +110,6 @@ function handleMove(socket, move) {
 function checkRound(roomId) {
     const room = rooms[roomId];
     if (!room) return;
-
-    // ⚡ No need to send ROUND_START here
 
     setTimeout(() => { 
         let winner = "draw";
@@ -130,7 +143,6 @@ function checkRound(roomId) {
         }
     }, 1000);
 }
-
 
 function handleDisconnect(socket) {
     if (socket.room && rooms[socket.room]) {
